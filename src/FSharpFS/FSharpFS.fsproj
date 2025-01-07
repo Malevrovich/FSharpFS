@@ -4,6 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="BlockAllocator.fs" />
     <Compile Include="HelloFUSE.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

@@ -1,4 +1,4 @@
-module FSFS
+namespace FSFS
 
 open Tmds.Fuse
 open System.Text
@@ -10,7 +10,6 @@ type HelloFPFileSystem() =
     inherit FuseFileSystemBase()
 
     let helloFilePath = "/hello" |> Encoding.UTF8.GetBytes
-
     let helloFileContent = "Hello World!" |> Encoding.UTF8.GetBytes
     let rootPath = "/" |> Encoding.UTF8.GetBytes
 

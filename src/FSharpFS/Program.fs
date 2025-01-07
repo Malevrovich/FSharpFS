@@ -5,7 +5,7 @@ open System.IO
 if not (Fuse.CheckDependencies()) then
     printfn "%s" Fuse.InstallationInstructions
 else
-    let fs = new HelloFPFileSystem() :> IFuseFileSystem
+    let fs = new HelloFPFileSystem() :> IFuseFileSystem // fsharplint:disable-line new indicates that type is IDisposable
 
     let mountPoint = "/tmp/HelloFS"
 

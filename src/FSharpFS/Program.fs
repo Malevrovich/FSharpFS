@@ -6,24 +6,27 @@ open Tmds.Linux
 open FSFS.FileSystem
 open FSFS.FileSystemPersistence
 
-let formatFile filename = 
-    use file = File.Open(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite)
+let formatFile filename =
+    use file =
+        File.Open(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite)
+
     file.Position <- 0l
     file |> formatStream 1500u 1500u 200u |> ignore
 
-let openFS filename = 
-    let rec openHelper filename retry = 
+let openFS filename =
+    let rec openHelper filename retry =
         let maybeFileSystem = tryReadFileSystem filename
 
         match maybeFileSystem with
         | Some fileSystem -> Ok fileSystem
-        | None -> 
+        | None ->
             formatFile filename
+
             if retry then
                 openHelper filename false
             else
                 Error "Failed to open file after format!"
-            
+
     openHelper filename true
 
 [<EntryPoint>]
@@ -36,9 +39,8 @@ let main argv =
         let fsRes = openFS argv[0]
 
         match fsRes with
-        | Error err -> 
-            printfn "Error: %s" err
-        | Ok (fileSystem) ->
+        | Error err -> printfn "Error: %s" err
+        | Ok(fileSystem) ->
             let fs = new FSFSFileSystem(fileSystem) :> IFuseFileSystem // fsharplint:disable-line. new indicates that type is IDisposable
 
             let mountPoint = "/tmp/fsfs"
@@ -61,21 +63,19 @@ let main argv =
                 printfn "fuser -kM %s" mountPoint
                 printfn "sudo umount -f %s" mountPoint
 
-    // let mkDirResult = 
+    // let mkDirResult =
     //     fsRes
     //     |> Result.bind (
-    //         fun fs -> 
+    //         fun fs ->
     //             printfn "Opened fs: %A" fs.FileTree
 
-    //             fs 
+    //             fs
     //             |> createDirectory "/dir1" 0u 0u (0b111_111_111us |> mode_t.op_Implicit)
     //             |> Result.mapError (fun code -> sprintf "Directory creation failed with %d" code)
     //     )
-    
+
     // match mkDirResult with
     // | Ok () -> printfn "Success!"
     // | Error (what) -> printfn "Error: %s" what
 
     0
-
-

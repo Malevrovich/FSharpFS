@@ -36,10 +36,12 @@ let private setBitsIdxs num =
 
     setBitsIdxsHelper 0u num
 
-let private blockBitmapIdx block = block / 64u 
+let private blockBitmapIdx block = block / 64u
 let private blockInMaskIdx block = block % 64u
 let private blockIdx bitmaskIdx inMaskIdx = bitmaskIdx * 64u + inMaskIdx
-let private blockMask (block: uint) = 1UL <<< (64 - int (block |> blockInMaskIdx) - 1)
+
+let private blockMask (block: uint) =
+    1UL <<< (64 - int (block |> blockInMaskIdx) - 1)
 
 let private blocksMask blocks =
     blocks |> Seq.map blockMask |> Seq.reduce (|||)
@@ -96,7 +98,7 @@ type BitmapAllocator private (state: Bitmap, blocksNum: uint, initiallyAllocated
         let allocated =
             (state |> Seq.map BitOperations.PopCount |> Seq.reduce (+))
             - (64 - (int blocksNum) % 64)
-            
+
         if (bitmapLen (int blocksNum)) <> state.Length then
             raise (System.ArgumentException())
 
@@ -122,7 +124,8 @@ type BitmapAllocator private (state: Bitmap, blocksNum: uint, initiallyAllocated
                 let op = uint bitmaskIdx, opMask
 
                 if tryApply op then
-                    let blocks = setBitsIdxs opMask |> Seq.map (blockIdx (uint bitmaskIdx)) |> List.ofSeq
+                    let blocks =
+                        setBitsIdxs opMask |> Seq.map (blockIdx (uint bitmaskIdx)) |> List.ofSeq
 
                     if num = allocated then
                         blocks
@@ -151,17 +154,12 @@ type BitmapAllocator private (state: Bitmap, blocksNum: uint, initiallyAllocated
     member this.Available() = int blocksNum - allocated.Value
 
     member this.AllocatedBlocks() =
-        state 
-        |> Seq.mapi (fun idx x -> idx,x) 
-        |> Seq.collect (
-            fun (bitmaskIdx, mask) -> 
-                setBitsIdxs mask 
-                |> Seq.map (blockIdx (uint bitmaskIdx))
-        )
+        state
+        |> Seq.mapi (fun idx x -> idx, x)
+        |> Seq.collect (fun (bitmaskIdx, mask) -> setBitsIdxs mask |> Seq.map (blockIdx (uint bitmaskIdx)))
         |> Seq.filter (fun block -> block < blocksNum)
 
 
     member this.State() = state
 
-    member this.BlockMask(block) =
-        blockBitmapIdx block, blockMask block
+    member this.BlockMask(block) = blockBitmapIdx block, blockMask block

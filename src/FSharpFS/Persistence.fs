@@ -88,19 +88,20 @@ type DataBlockStorageIOAdapter(stream: Stream, blockSize: uint32, baseOffset: ui
         blockStream.Stream.Flush() |> ignore
 
 type ObjectBlockStorageIOAdapterPool(filename: string, blockSize: uint32, baseOffset: uint32) =
-    let filePool = 
+    let filePool =
         new ObjectPool<Stream * ObjectBlockStorageIOAdapter>(
-            16u, 
+            16u,
             (fun _ ->
-                let file = File.Open(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)
-                file, ObjectBlockStorageIOAdapter(file, blockSize, baseOffset)), 
+                let file =
+                    File.Open(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)
+
+                file, ObjectBlockStorageIOAdapter(file, blockSize, baseOffset)),
             (fun (file, _) -> file.Close() |> ignore)
         )
 
-    interface IDisposable with 
-        member this.Dispose() =
-            (filePool :> IDisposable).Dispose()
-    
+    interface IDisposable with
+        member this.Dispose() = (filePool :> IDisposable).Dispose()
+
     member this.ReadObject<'T> addr =
         let (handle, (file, io)) = filePool.Acquire()
         let res = io.ReadObject<'T> addr
@@ -113,33 +114,34 @@ type ObjectBlockStorageIOAdapterPool(filename: string, blockSize: uint32, baseOf
         filePool.Release handle
 
 type DataBlockStorageIOAdapterPool(filename: string, blockSize: uint32, baseOffset: uint32) =
-    let filePool = 
+    let filePool =
         new ObjectPool<Stream * DataBlockStorageIOAdapter>(
-            16u, 
+            16u,
             (fun _ ->
-                let file = File.Open(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)
-                file, DataBlockStorageIOAdapter(file, blockSize, baseOffset)), 
+                let file =
+                    File.Open(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)
+
+                file, DataBlockStorageIOAdapter(file, blockSize, baseOffset)),
             (fun (file, _) -> file.Close() |> ignore)
         )
 
-    interface IDisposable with 
-        member this.Dispose() =
-            (filePool :> IDisposable).Dispose()
-    
+    interface IDisposable with
+        member this.Dispose() = (filePool :> IDisposable).Dispose()
+
     member this.ReadData(blockAddr, span: byte span, ?offset) =
         let (handle, (file, io)) = filePool.Acquire()
-        
+
         match offset with
         | Some offset -> io.ReadData(blockAddr, span, offset)
         | None -> io.ReadData(blockAddr, span)
-        
+
         filePool.Release handle
 
     member this.WriteData(blockAddr, span: byte readonlyspan, ?offset) =
         let (handle, (file, io)) = filePool.Acquire()
-        
+
         match offset with
         | Some offset -> io.WriteData(blockAddr, span, offset)
         | None -> io.WriteData(blockAddr, span)
-        
+
         filePool.Release handle

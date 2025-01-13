@@ -34,22 +34,22 @@ type MetadataDTOBlock =
     | FileExtensionDTO of FileMetadataExtensionDTO
     | DirectoryDTO of DirectoryMetadataDTO
 
-let commonMetadataToDTO (parent: BlockStorageAddr) (commonMD: CommonMetadata)=
+let commonMetadataToDTO (parent: BlockStorageAddr) (commonMD: CommonMetadata) =
     { Name = stringAddr commonMD.Name
       Parent = parent
       Uid = commonMD.Uid
       Gid = commonMD.Gid
       Mode = commonMD.Mode }
 
-let directoryMetadataToDTO (parent: BlockStorageAddr) (dirMD: DirectoryMetadata)  =
+let directoryMetadataToDTO (parent: BlockStorageAddr) (dirMD: DirectoryMetadata) =
     DirectoryDTO({ Common = commonMetadataToDTO parent dirMD.Common })
 
 let fileMetadataToDTOs (fileMD: FileMetadata) (parent: BlockStorageAddr) =
     let contentSeq = fileMD.Content |> Seq.chunkBySize maxBlocksInNode
 
     let fileMDDTO: FileMetadataDTO =
-        { Common = commonMetadataToDTO parent fileMD.Common 
-          Content = contentSeq |> Seq.head 
+        { Common = commonMetadataToDTO parent fileMD.Common
+          Content = contentSeq |> Seq.head
           Extension = fileMD.ExtensionAddrs |> List.tryHead }
 
     if fileMD.ExtensionAddrs.IsEmpty then
@@ -65,7 +65,7 @@ let fileMetadataToDTOs (fileMD: FileMetadata) (parent: BlockStorageAddr) =
              |> Seq.zip extAddrSeq
              |> Seq.map (fun (addr, blocks) ->
                  FileExtensionDTO(
-                     { FileMetadataExtensionDTO.Content = blocks 
+                     { FileMetadataExtensionDTO.Content = blocks
                        FileMetadataExtensionDTO.Extension = addr }
                  )))
 
@@ -73,7 +73,7 @@ let nodeToDTOs (node: FileTreeNode) (parent: BlockStorageAddr) =
     match node with
     | FileNode(fileMD) -> fileMetadataToDTOs fileMD parent
     | DirectoryNode(dirMD) -> seq { directoryMetadataToDTO parent dirMD }
-    | FillerNode(name) -> seq {}
+    | FillerNode(name) -> seq { }
 
 let tryUnwrapFile block =
     match block with
@@ -137,7 +137,7 @@ let parseDTOBlocks (dtoSeq: (BlockStorageAddr * MetadataDTOBlock) seq) (strings:
 
     let parentToDirs =
         dirs |> Seq.groupBy (fun (_, dirMDDTO) -> dirMDDTO.Common.Parent) |> Map.ofSeq
-    
+
     let parentToFiles =
         files
         |> Seq.groupBy (fun (_, fileMDDTO) -> fileMDDTO.Common.Parent)
@@ -149,22 +149,21 @@ let parseDTOBlocks (dtoSeq: (BlockStorageAddr * MetadataDTOBlock) seq) (strings:
         let childrenDirs =
             parentToDirs
             |> Map.tryFind addr
-            |> Option.defaultValue (seq{})
+            |> Option.defaultValue (seq { })
             |> Seq.map (fun (addr, childMDDTO) -> parseDirTree addr childMDDTO)
 
         let childrenFiles =
             parentToFiles
             |> Map.tryFind addr
-            |> Option.defaultValue (seq{})
+            |> Option.defaultValue (seq { })
             |> Seq.map (fun (addr, childMDDTO) -> parseFile strMap fileExts addr childMDDTO)
 
         DirectoryNode
             { DirectoryMetadata.Common = commonMD
-              DirectoryMetadata.Content = 
-                Seq.append childrenDirs childrenFiles 
-                |> Seq.map (fun node -> nodeName node, node) 
-                |> Map.ofSeq 
-            }
+              DirectoryMetadata.Content =
+                Seq.append childrenDirs childrenFiles
+                |> Seq.map (fun node -> nodeName node, node)
+                |> Map.ofSeq }
 
     let (rootDirAddr, rootDirMD) =
         parentToDirs |> Map.find rootParentAddr |> Seq.exactlyOne

@@ -18,6 +18,7 @@ type CommonMetadataDTO =
 
 type FileMetadataDTO =
     { Common: CommonMetadataDTO
+      Size: uint
       Content: BlockStorageAddr array
       Extension: BlockStorageAddr option }
 
@@ -44,36 +45,30 @@ let commonMetadataToDTO (parent: BlockStorageAddr) (commonMD: CommonMetadata) =
 let directoryMetadataToDTO (parent: BlockStorageAddr) (dirMD: DirectoryMetadata) =
     DirectoryDTO({ Common = commonMetadataToDTO parent dirMD.Common })
 
-let fileMetadataToDTOs (fileMD: FileMetadata) (parent: BlockStorageAddr) =
+let fileMetadataToDTOs (parent: BlockStorageAddr) (fileMD: FileMetadata) =
     let contentSeq = fileMD.Content |> Seq.chunkBySize maxBlocksInNode
 
     let fileMDDTO: FileMetadataDTO =
         { Common = commonMetadataToDTO parent fileMD.Common
+          Size = fileMD.Size
           Content = contentSeq |> Seq.head
           Extension = fileMD.ExtensionAddrs |> List.tryHead }
 
     if fileMD.ExtensionAddrs.IsEmpty then
-        seq { FileDTO(fileMDDTO) }
+        FileDTO(fileMDDTO), seq { }
     else
         let extAddrSeq =
             Seq.append (fileMD.ExtensionAddrs |> Seq.skip 1 |> Seq.map Some) (seq { None })
 
-        Seq.append
-            (seq { FileDTO(fileMDDTO) })
-            (contentSeq
-             |> Seq.skip 1
-             |> Seq.zip extAddrSeq
-             |> Seq.map (fun (addr, blocks) ->
-                 FileExtensionDTO(
-                     { FileMetadataExtensionDTO.Content = blocks
-                       FileMetadataExtensionDTO.Extension = addr }
-                 )))
-
-let nodeToDTOs (node: FileTreeNode) (parent: BlockStorageAddr) =
-    match node with
-    | FileNode(fileMD) -> fileMetadataToDTOs fileMD parent
-    | DirectoryNode(dirMD) -> seq { directoryMetadataToDTO parent dirMD }
-    | FillerNode(name) -> seq { }
+        FileDTO(fileMDDTO),
+        (contentSeq
+         |> Seq.skip 1
+         |> Seq.zip extAddrSeq
+         |> Seq.map (fun (addr, blocks) ->
+             FileExtensionDTO(
+                 { FileMetadataExtensionDTO.Content = blocks
+                   FileMetadataExtensionDTO.Extension = addr }
+             )))
 
 let tryUnwrapFile block =
     match block with
@@ -119,6 +114,8 @@ let private parseFile strMap fileExts addr (fileMDDTO: FileMetadataDTO) =
 
     FileNode
         { Common = commonMD
+          Size = fileMDDTO.Size
+          SizeLock = RWLock.emptyLock
           Content = content
           ExtensionAddrs = extAddrs }
 
@@ -184,6 +181,7 @@ let commonMetadataSize = binarySerializer.ComputeSize commonMetadata
 let private bigMetadata: MetadataDTOBlock =
     FileDTO(
         { Common = commonMetadata
+          Size = 0u
           Content = Array.init maxBlocksInNode (fun x -> { BlockId = 0xDEADBEEFu })
           Extension = Some { BlockId = 10u } }
     )

@@ -107,7 +107,9 @@ type BitmapAllocator private (state: Bitmap, blocksNum: uint, initiallyAllocated
     public new(blocksNum: uint) = BitmapAllocator(emptyState blocksNum, blocksNum, 0)
 
     member this.Allocate(num) =
-        if not <| tryReserve num then
+        if num = 0u then
+            Some []
+        elif not <| tryReserve num then
             None
         else
             // It's guaranteed that allocator has enough free space

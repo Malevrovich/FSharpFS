@@ -9,6 +9,8 @@ open System
 
 type BlockStorageAddr = { BlockId: uint32 } // block id
 
+let blockId = fun blockAddr -> blockAddr.BlockId
+
 let private binarySerializer = FsPickler.CreateBinarySerializer()
 
 let serialize<'T> obj stream =

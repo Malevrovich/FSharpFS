@@ -9,6 +9,7 @@
     <Compile Include="ObjectPool.fs" />
     <Compile Include="BitmapAllocatorPersistence.fs" />
     <Compile Include="Persistence.fs" />
+    <Compile Include="RWLock.fs" />
     <Compile Include="FileTree.fs" />
     <Compile Include="FileTreePersistence.fs" />
     <Compile Include="FileSystem.fs" />

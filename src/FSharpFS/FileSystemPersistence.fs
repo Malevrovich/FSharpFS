@@ -84,7 +84,7 @@ let tryReadFileSystem (filename: string) =
             { FileTree = fileTree
               MetadataStorage = mdStorage
               StringStorage = stringStorage
-              DataAllocator = dataStorage }
+              DataStorage = dataStorage }
     }
 
 let createRootNode rootNameBlock rootBlockAddr =

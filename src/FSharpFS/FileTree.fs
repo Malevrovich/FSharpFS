@@ -1,10 +1,10 @@
 module FSFS.FileTree
 
-
 open Tmds.Linux
 open FsToolkit.ErrorHandling
 
 open FSFS.Persistence
+open FSFS.RWLock
 
 type StringWithAddr = BlockStorageAddr * string
 
@@ -21,6 +21,8 @@ and DirectoryMetadata =
 
 and FileMetadata =
     { Common: CommonMetadata
+      Size: uint
+      SizeLock: RWLock
       Content: BlockStorageAddr list
       ExtensionAddrs: BlockStorageAddr list }
 
@@ -108,19 +110,27 @@ let trySetNodeAt (path: string) name setter root =
 
     tryModifyNodeAtPath path lastNodeAction root
 
+type UpdateResult =
+    { Parent: DirectoryMetadata
+      OldNode: FileTreeNode
+      NewNode: FileTreeNode }
+
 let tryUpdateNodeAt (path: string) name updater root =
     let lastNodeAction (dirMD: DirectoryMetadata) =
         dirMD.Content
         |> Map.tryFind name
-        |> Option.map (fun node ->
+        |> Result.requireSome LibC.ENOENT
+        |> Result.bind (fun node ->
             updater node
-            |> Result.map (fun newNode ->
-                (node,
-                 DirectoryNode(
-                     { Common = dirMD.Common
-                       Content = (dirMD.Content |> Map.add name newNode) }
-                 ))))
-        |> Option.defaultValue (Error LibC.ENOENT)
+            |> Result.map (fun (newNode) ->
+                let newDirMD =
+                    { Common = dirMD.Common
+                      Content = (dirMD.Content |> Map.add name newNode) }
+
+                ({ Parent = newDirMD
+                   OldNode = node
+                   NewNode = newNode },
+                 DirectoryNode(newDirMD))))
 
     tryModifyNodeAtPath path lastNodeAction root
 

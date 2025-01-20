@@ -17,7 +17,19 @@ module CompensativeResult =
                 Failure e
             | Success(s2, undoList2) -> Success(s2, undoList1 @ undoList2)
 
-    let bindResult act revert x =
+    let map f x =
+        match x with
+        | Failure e -> Failure e
+        | Success(s1, undoList1) ->
+            let (s2, undoList2) = f s1
+            Success(s2, undoList1 @ undoList2)
+
+    let iterRevertable f x =
+        match x with
+        | Failure e -> Failure e
+        | Success(s1, undoList1) -> Success(s1, undoList1 @ [ f s1 ])
+
+    let bindRevertableResult act revert x =
         match x with
         | Failure e -> Failure e
         | Success(s1, undoList1) ->
@@ -27,6 +39,16 @@ module CompensativeResult =
                 Failure e
             | Ok(ok2) -> Success(ok2, undoList1 @ [ revert ])
 
+    let bindResult act x =
+        match x with
+        | Failure e -> Failure e
+        | Success(s1, undoList1) ->
+            match act s1 with
+            | Error e ->
+                undoList1 |> Seq.rev |> Seq.iter (fun undo -> undo ())
+                Failure e
+            | Ok(ok2) -> Success(ok2, undoList1)
+
     let bindUndoAndResult action x =
         match x with
         | Failure e -> Failure e
@@ -35,7 +57,7 @@ module CompensativeResult =
             | Error e ->
                 undoList1 |> Seq.rev |> Seq.iter (fun undo -> undo ())
                 Failure e
-            | Ok(undoList, ok2) -> Success(ok2, undoList1 @ undoList)
+            | Ok(ok2, undoList) -> Success(ok2, undoList1 @ undoList)
 
     let toResult x =
         match x with

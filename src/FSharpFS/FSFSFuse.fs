@@ -38,18 +38,26 @@ type FSFSFileSystem(fileSystem: FileSystem) =
 
 
     override this.Read(path: string, off: uint64, span: System.Span<byte>, fi: byref<FuseFileInfo>) : int =
-        let res = read path (uint off) span fileSystem
+        try
+            let res = read path (uint off) span fileSystem
 
-        match res with
-        | Ok res -> res
-        | Error code -> -code
+            match res with
+            | Ok res -> res
+            | Error code -> -code
+        with e ->
+            printfn "%A" e
+            raise e
 
     override this.Write(path: string, off: uint64, span: System.ReadOnlySpan<byte>, fi: byref<FuseFileInfo>) : int =
-        let res = write path (uint off) span fileSystem
+        try
+            let res = write path (uint off) span fileSystem
 
-        match res with
-        | Ok res -> res
-        | Error code -> -code
+            match res with
+            | Ok res -> res
+            | Error code -> -code
+        with e ->
+            printfn "%A" e
+            raise e
 
     override this.MkDir(path: string, mode: mode_t) : int =
         fileSystem |> createDirectory path 0u 0u mode |> resultToErrorCode

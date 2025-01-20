@@ -15,7 +15,7 @@ let FSFSMagic = "F#FS"
 
 let skipBlockStorageSize (info: BlockStorageInfo) (stream: Stream) =
     let areaSize = info.BlockSize * info.BlockCount
-    stream.Position <- int64 areaSize
+    stream.Seek(int64 areaSize, SeekOrigin.Current) |> ignore
     stream
 
 let tryReadObjectBlockStorage (stream: Stream) (filename: string) =

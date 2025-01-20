@@ -46,8 +46,9 @@ let private posToAddr blockStream pos =
 let private setPosition pos blockStream =
     blockStream.Stream.Position <- int64 (pos + blockStream.BaseOffset)
 
-let private setAddr addr blockStream =
-    blockStream |> setPosition (addr |> addrToPos blockStream)
+let private setAddr addr offset blockStream =
+    blockStream |> setPosition ((addr |> addrToPos blockStream) + offset)
+
 
 type ObjectBlockStorageIOAdapter(stream: Stream, blockSize: uint32, baseOffset: uint32) =
     let blockStream =
@@ -56,11 +57,11 @@ type ObjectBlockStorageIOAdapter(stream: Stream, blockSize: uint32, baseOffset: 
           BaseOffset = baseOffset }
 
     member this.ReadObject<'T> addr =
-        blockStream |> setAddr addr
+        blockStream |> setAddr addr 0u
         binarySerializer.Deserialize<'T>(blockStream.Stream, leaveOpen = true)
 
     member this.WriteObject<'T> (value: 'T) addr =
-        blockStream |> setAddr addr
+        blockStream |> setAddr addr 0u
         binarySerializer.Serialize(blockStream.Stream, value, leaveOpen = true)
         blockStream.Stream.Flush() |> ignore
 
@@ -73,19 +74,20 @@ type DataBlockStorageIOAdapter(stream: Stream, blockSize: uint32, baseOffset: ui
 
     let blockOffset maybeOffset =
         maybeOffset
-        |> Option.bind (fun x -> if x > 0L then Some x else None)
-        |> Option.defaultValue 0L
+        |> Option.bind (fun x -> if x > 0u then Some x else None)
+        |> Option.defaultValue 0u
 
     let setBlockAddr blockAddr offset =
-        blockStream |> setAddr blockAddr
-        blockStream.Stream.Position <- offset |> blockOffset
+        blockStream |> setAddr blockAddr (offset |> blockOffset)
 
     member this.ReadData(blockAddr, span: byte span, ?offset) =
         setBlockAddr blockAddr offset
+        printfn "Reading %d bytes from %d" span.Length blockStream.Stream.Position
         blockStream.Stream.Read(span) |> ignore
 
     member this.WriteData(blockAddr, span: byte readonlyspan, ?offset) =
         setBlockAddr blockAddr offset
+        printfn "Writing %d bytes to %d" span.Length blockStream.Stream.Position
         blockStream.Stream.Write(span)
         blockStream.Stream.Flush() |> ignore
 
@@ -103,6 +105,9 @@ type ObjectBlockStorageIOAdapterPool(filename: string, blockSize: uint32, baseOf
 
     interface IDisposable with
         member this.Dispose() = (filePool :> IDisposable).Dispose()
+
+    member this.BaseOffset = baseOffset
+
 
     member this.ReadObject<'T> addr =
         let (handle, (file, io)) = filePool.Acquire()
@@ -129,6 +134,8 @@ type DataBlockStorageIOAdapterPool(filename: string, blockSize: uint32, baseOffs
 
     interface IDisposable with
         member this.Dispose() = (filePool :> IDisposable).Dispose()
+
+    member this.BaseOffset = baseOffset
 
     member this.ReadData(blockAddr, span: byte span, ?offset) =
         let (handle, (file, io)) = filePool.Acquire()

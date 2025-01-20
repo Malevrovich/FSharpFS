@@ -569,87 +569,113 @@ let setFileSize (path: string) (newSize: uint) (filesystem: FileSystem) =
             filesystem |> updateFileSize parentAddr fileMD newSize
         else
             filesystem |> truncateFile parentAddr fileMD newSize)
-    |> bindResult (fun fileMD -> filesystem |> tryApplyTreeOperation (unlockFileWithNewMDOop fileMD) snd)
+    |> bindResult (fun newFileMD ->
+        filesystem
+        |> tryApplyTreeOperation (unlockFileWithNewMDOop newFileMD) snd
+        |> Result.map (fun _ -> newFileMD))
     |> toResult
-    |> Result.ignore
 
-let rec private splitSpanByBlockSeq blockSize content (offset: int) spanLen =
+let rec private splitSpanByBlockSeq blockSize content (offset: int) spanOffset spanLen =
     seq {
         let size = min spanLen (blockSize - offset)
         let rem = spanLen - size
         let addr = content |> List.head
 
-        yield (addr, offset, size)
+        yield (addr, offset, spanOffset, size)
 
         if rem <> 0 then
-            yield! (splitSpanByBlockSeq blockSize (content |> List.tail) 0 rem)
+            yield! (splitSpanByBlockSeq blockSize (content |> List.tail) 0 (size + spanOffset) rem)
     }
 
 let read (path: string) (offset: uint) (buffer: byte span) (filesystem: FileSystem) =
     let fileMDRes =
-        filesystem.FileTree
-        |> FileTree.tryGetNodeAt path
-        |> Result.bind (fun node ->
-            match node with
-            | FileTree.DirectoryNode(_) -> Error LibC.EISDIR
-            | FileTree.FillerNode(_) -> Error LibC.ENOENT
-            | FileTree.FileNode(fileMD) -> Ok(fileMD))
+        filesystem.FileTree |> FileTree.tryGetNodeAt path |> Result.bind unwrapFileNode
+
+    printfn "Read request at offset %d with length %d" offset buffer.Length
 
     // unable to use Result.Bind due to span
     match fileMDRes with
     | Error(code) -> Error code
+    | Ok(fileMD) when buffer.Length = 0 || fileMD.Size - offset = 0u -> Ok 0
     | Ok(fileMD) ->
         let blockSize = filesystem.DataStorage.Info.BlockSize
 
         let size = int (min (fileMD.Size - offset) (uint buffer.Length))
-        let dst = buffer[0..size]
+        let dst = buffer[0 .. size - 1]
 
         let readSeq =
             splitSpanByBlockSeq
                 (int blockSize)
                 (fileMD.Content |> List.skip (int (offset / blockSize)))
                 (int (offset % blockSize))
+                0
                 dst.Length
 
-        for (addr, readOffset, readSize) in readSeq do
-            let readDst = dst[0..readSize]
+        for (addr, readOffset, spanOffset, readSize) in readSeq do
+            let readDst = dst[spanOffset .. spanOffset + readSize - 1]
 
-            filesystem.DataStorage.DataIO.ReadData(addr, readDst, readOffset)
+            printfn
+                "Reading addr %d readOffset %d spanOffset %d readSize %d"
+                addr.BlockId
+                readOffset
+                spanOffset
+                readSize
+
+            filesystem.DataStorage.DataIO.ReadData(addr, readDst, uint readOffset)
 
         Ok size
 
 let write (path: string) (offset: uint) (buffer: byte readonlyspan) (filesystem: FileSystem) =
     let fileMDRes =
-        filesystem.FileTree
-        |> FileTree.tryGetNodeAt path
-        |> Result.bind (fun node ->
-            match node with
-            | FileTree.DirectoryNode(_) -> Error LibC.EISDIR
-            | FileTree.FillerNode(_) -> Error LibC.ENOENT
-            | FileTree.FileNode(fileMD) -> Ok(fileMD))
+        filesystem.FileTree |> FileTree.tryGetNodeAt path |> Result.bind unwrapFileNode
+
+    printfn "Write request at offset %d with length %d" offset buffer.Length
 
     // unable to use Result.Bind due to span
     match fileMDRes with
     | Error(code) -> Error code
+    | Ok(fileMD) when buffer.Length = 0 -> Ok 0
     | Ok(fileMD) ->
         let blockSize = filesystem.DataStorage.Info.BlockSize
 
-        let size = int (min (fileMD.Size - offset) (uint buffer.Length))
-        let dst = buffer[0..size]
+        let newFileMD =
+            if offset + uint buffer.Length > fileMD.Size then
+                let res = setFileSize path (offset + uint buffer.Length) filesystem
 
-        let writeSeq =
-            splitSpanByBlockSeq
-                (int blockSize)
-                (fileMD.Content |> List.skip (int (offset / blockSize)))
-                (int (offset % blockSize))
-                dst.Length
+                match res with
+                | Ok(newFileMD) -> newFileMD
+                | Error(code) -> fileMD
+            else
+                fileMD
 
-        for (addr, writeOffset, writeSize) in writeSeq do
-            let writeDst = dst[0..writeSize]
+        let size = int (min (newFileMD.Size - offset) (uint buffer.Length))
 
-            filesystem.DataStorage.DataIO.WriteData(addr, writeDst, writeOffset)
+        if size = 0 then
+            Ok 0
+        else
+            let dst = buffer[0 .. size - 1]
 
-        Ok size
+            let writeSeq =
+                splitSpanByBlockSeq
+                    (int blockSize)
+                    (newFileMD.Content |> List.skip (int (offset / blockSize)))
+                    (int (offset % blockSize))
+                    0
+                    dst.Length
+
+            for (addr, writeOffset, spanOffset, writeSize) in writeSeq do
+                let writeDst = dst[spanOffset .. spanOffset + writeSize - 1]
+
+                printfn
+                    "Writing addr %d writeOffset %d spanOffset %d writeSize %d"
+                    addr.BlockId
+                    writeOffset
+                    spanOffset
+                    writeSize
+
+                filesystem.DataStorage.DataIO.WriteData(addr, writeDst, uint writeOffset)
+
+            Ok size
 
 let chown (path: string) (uid: uint) (gid: uint) (filesystem: FileSystem) =
     let dirPath, filename = splitLastSep path

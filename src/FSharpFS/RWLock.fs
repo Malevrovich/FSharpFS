@@ -20,23 +20,34 @@ let tryLock =
     ) 
 *)
 
-type RWLock = { WriteLocked: bool; ReadLocked: bool }
+type RWLock = { WriteLocked: bool; ReadLocked: int }
 
 module RWLock =
-    let emptyLock =
-        { WriteLocked = false
-          ReadLocked = false }
+    let emptyLock = { WriteLocked = false; ReadLocked = 0 }
 
     let tryAcquireReadLock lock =
         if lock.WriteLocked then
             None
         else
-            Some { lock with ReadLocked = true }
+            Some
+                { lock with
+                    ReadLocked = lock.ReadLocked + 1 }
 
-    let releaseReadLock lock = { lock with ReadLocked = false }
+    let releaseReadLock lock =
+        { lock with
+            ReadLocked = lock.ReadLocked - 1 }
+
+    let tryUpgradeLock lock =
+        if lock.WriteLocked || (lock.ReadLocked <> 1) then
+            None
+        else
+            Some
+                { lock with
+                    WriteLocked = true
+                    ReadLocked = 0 }
 
     let tryAcquireWriteLock lock =
-        if lock.WriteLocked || lock.ReadLocked then
+        if lock.WriteLocked || (lock.ReadLocked <> 0) then
             None
         else
             Some { lock with WriteLocked = true }

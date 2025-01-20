@@ -5,13 +5,14 @@ open Tmds.Linux
 
 open FSFS.FileSystem
 open FSFS.FileSystemPersistence
+open FSFS.Persistence
 
 let formatFile filename =
     use file =
         File.Open(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite)
 
     file.Position <- 0l
-    file |> formatStream 1500u 1500u 200u |> ignore
+    file |> formatStream 200u 200u 500u |> ignore
 
 let openFS filename =
     let rec openHelper filename retry =
@@ -41,6 +42,12 @@ let main argv =
         match fsRes with
         | Error err -> printfn "Error: %s" err
         | Ok(fileSystem) ->
+            printfn "Opened FS: %A" fileSystem.FileTree
+
+            printfn "md storage base offset %d" fileSystem.MetadataStorage.ObjectIO.BaseOffset
+            printfn "string storage base offset %d" fileSystem.StringStorage.ObjectIO.BaseOffset
+            printfn "data storage base offset %d" fileSystem.DataStorage.DataIO.BaseOffset
+
             let fs = new FSFSFileSystem(fileSystem) :> IFuseFileSystem // fsharplint:disable-line. new indicates that type is IDisposable
 
             let mountPoint = "/tmp/fsfs"
@@ -62,20 +69,5 @@ let main argv =
                 printfn "Try unmounting the file system by executing:"
                 printfn "fuser -kM %s" mountPoint
                 printfn "sudo umount -f %s" mountPoint
-
-    // let mkDirResult =
-    //     fsRes
-    //     |> Result.bind (
-    //         fun fs ->
-    //             printfn "Opened fs: %A" fs.FileTree
-
-    //             fs
-    //             |> createDirectory "/dir1" 0u 0u (0b111_111_111us |> mode_t.op_Implicit)
-    //             |> Result.mapError (fun code -> sprintf "Directory creation failed with %d" code)
-    //     )
-
-    // match mkDirResult with
-    // | Ok () -> printfn "Success!"
-    // | Error (what) -> printfn "Error: %s" what
 
     0

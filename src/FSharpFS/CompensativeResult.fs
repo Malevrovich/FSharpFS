@@ -10,58 +10,58 @@ module CompensativeResult =
     let bind f x =
         match x with
         | Failure e -> Failure e
-        | Success(s1, undoList1) ->
-            match f s1 with
+        | Success(valueLHS, undoLHS) ->
+            match f valueLHS with
             | Failure e ->
-                undoList1 |> Seq.rev |> Seq.iter (fun undo -> undo ())
+                undoLHS |> Seq.rev |> Seq.iter (fun undo -> undo ())
                 Failure e
-            | Success(s2, undoList2) -> Success(s2, undoList1 @ undoList2)
+            | Success(valueRHS, undoRHS) -> Success(valueRHS, undoLHS @ undoRHS)
 
     let map f x =
         match x with
         | Failure e -> Failure e
-        | Success(s1, undoList1) ->
-            let (s2, undoList2) = f s1
-            Success(s2, undoList1 @ undoList2)
+        | Success(valueLHS, undoLHS) ->
+            let (valueRHS, undoRHS) = f valueLHS
+            Success(valueRHS, undoLHS @ undoRHS)
 
     let iterRevertable f x =
         match x with
         | Failure e -> Failure e
-        | Success(s1, undoList1) -> Success(s1, undoList1 @ [ f s1 ])
+        | Success(valueLHS, undoLHS) -> Success(valueLHS, undoLHS @ [ f valueLHS ])
 
     let bindRevertableResult act revert x =
         match x with
         | Failure e -> Failure e
-        | Success(s1, undoList1) ->
-            match act s1 with
+        | Success(valueLHS, undoLHS) ->
+            match act valueLHS with
             | Error e ->
-                undoList1 |> Seq.rev |> Seq.iter (fun undo -> undo ())
+                undoLHS |> Seq.rev |> Seq.iter (fun undo -> undo ())
                 Failure e
-            | Ok(ok2) -> Success(ok2, undoList1 @ [ revert ])
+            | Ok(valueRHS) -> Success(valueRHS, undoLHS @ [ revert ])
 
     let bindResult act x =
         match x with
         | Failure e -> Failure e
-        | Success(s1, undoList1) ->
-            match act s1 with
+        | Success(valueLHS, undoLHS) ->
+            match act valueLHS with
             | Error e ->
-                undoList1 |> Seq.rev |> Seq.iter (fun undo -> undo ())
+                undoLHS |> Seq.rev |> Seq.iter (fun undo -> undo ())
                 Failure e
-            | Ok(ok2) -> Success(ok2, undoList1)
+            | Ok(valueRHS) -> Success(valueRHS, undoLHS)
 
     let bindUndoAndResult action x =
         match x with
         | Failure e -> Failure e
-        | Success(s1, undoList1) ->
-            match action s1 with
+        | Success(valueLHS, undoLHS) ->
+            match action valueLHS with
             | Error e ->
-                undoList1 |> Seq.rev |> Seq.iter (fun undo -> undo ())
+                undoLHS |> Seq.rev |> Seq.iter (fun undo -> undo ())
                 Failure e
-            | Ok(ok2, undoList) -> Success(ok2, undoList1 @ undoList)
+            | Ok(valueRHS, undoList) -> Success(valueRHS, undoLHS @ undoList)
 
     let toResult x =
         match x with
         | Failure e -> Error e
-        | Success(s, undoList) -> Ok s
+        | Success(value, _) -> Ok value
 
     let empty = Success((), [])

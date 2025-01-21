@@ -15,7 +15,6 @@
     <Compile Include="FileSystem.fs" />
     <Compile Include="FileSystemPersistence.fs" />
     <Compile Include="FSFSFuse.fs" />
-    <Compile Include="HelloFUSE.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

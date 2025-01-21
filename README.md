@@ -23,7 +23,7 @@
 <img src="https://github.com/user-attachments/assets/3c48e028-3baa-4169-b54b-235b59c137db" width=50% height=50%>
 
 
-[Здесь](https://github.com/Malevrovich/FSharpFS/tree/main/tests/unit/scripts) находятся скрипты, для тестирования
+[Здесь](https://github.com/Malevrovich/FSharpFS/tree/main/tests/scripts) находятся скрипты, для тестирования
 
 Один из тестовых сценариев. FSFS монтируется в /tmp/fsfs
 ```bash

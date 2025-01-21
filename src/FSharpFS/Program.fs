@@ -12,7 +12,7 @@ let formatFile filename =
         File.Open(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite)
 
     file.Position <- 0l
-    file |> formatStream 200u 200u 500u |> ignore
+    file |> formatStream 5000u 5000u 320000u |> ignore
 
 let openFS filename =
     let rec openHelper filename retry =
@@ -43,10 +43,6 @@ let main argv =
         | Error err -> printfn "Error: %s" err
         | Ok(fileSystem) ->
             printfn "Opened FS: %A" fileSystem.FileTree
-
-            printfn "md storage base offset %d" fileSystem.MetadataStorage.ObjectIO.BaseOffset
-            printfn "string storage base offset %d" fileSystem.StringStorage.ObjectIO.BaseOffset
-            printfn "data storage base offset %d" fileSystem.DataStorage.DataIO.BaseOffset
 
             let fs = new FSFSFileSystem(fileSystem) :> IFuseFileSystem // fsharplint:disable-line. new indicates that type is IDisposable
 

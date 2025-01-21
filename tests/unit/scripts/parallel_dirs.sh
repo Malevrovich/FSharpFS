@@ -1,3 +1,5 @@
+#!/bin/bash
+
 mkdir /tmp/fsfs/{00..19}
 
 mkdir /tmp/fsfs/00/{01..10} &
@@ -28,3 +30,5 @@ if [ $(tree /tmp/fsfs | grep dir | cut -d' ' -f 1) -eq '221' ]; then
 else
     echo Fail
 fi
+
+rm -r /tmp/fsfs/{00..19}

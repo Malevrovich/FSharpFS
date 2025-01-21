@@ -513,7 +513,7 @@ let extendFile parentAddr (fileMD: FileTree.FileMetadata) newSize (filesystem: F
              filesystem.MetadataStorage.ObjectIO.WriteObject oldFileMDDTO fileMD.Common.Addr))
     |> map (fun (newFileMD, _, _) -> newFileMD, [])
 
-let setFileSize (path: string) (newSize: uint) (filesystem: FileSystem) =
+let setFileSize (path: string) (newSize: uint) (rlocked: bool) (filesystem: FileSystem) =
     let dirName, filename = splitLastSep path
 
     let lockFileSize node =
@@ -521,7 +521,12 @@ let setFileSize (path: string) (newSize: uint) (filesystem: FileSystem) =
         |> unwrapFileNode
         |> Result.map (fun fileMD ->
             option {
-                let! newSizeLock = fileMD.SizeLock |> RWLock.tryAcquireWriteLock
+                let! newSizeLock =
+                    if rlocked then
+                        fileMD.SizeLock |> RWLock.tryUpgradeLock
+                    else
+                        fileMD.SizeLock |> RWLock.tryAcquireWriteLock
+
                 return FileTree.FileNode { fileMD with SizeLock = newSizeLock }
             })
         |> Result.bind (Result.requireSome LibC.EBUSY)
@@ -533,9 +538,13 @@ let setFileSize (path: string) (newSize: uint) (filesystem: FileSystem) =
         |> Result.map (fun fileMD ->
             let md = newMD |> Option.defaultValue fileMD
 
-            FileTree.FileNode
-                { md with
-                    SizeLock = fileMD.SizeLock |> RWLock.releaseWriteLock })
+            let newLock =
+                if rlocked then
+                    fileMD.SizeLock
+                else
+                    fileMD.SizeLock |> RWLock.releaseWriteLock
+
+            FileTree.FileNode { md with SizeLock = newLock })
 
     let lockFileSizeOp = FileTree.tryUpdateNodeAt dirName filename lockFileSize
 
@@ -587,11 +596,52 @@ let rec private splitSpanByBlockSeq blockSize content (offset: int) spanOffset s
             yield! (splitSpanByBlockSeq blockSize (content |> List.tail) 0 (size + spanOffset) rem)
     }
 
+let private fileAcquireReadLock path (filesystem: FileSystem) =
+    let dirPath, filename = splitLastSep path
+
+    let acquireRLock node =
+        node
+        |> unwrapFileNode
+        |> Result.map (fun fileMD ->
+            option {
+                let! newSizeLock = fileMD.SizeLock |> RWLock.tryAcquireReadLock
+                return FileTree.FileNode { fileMD with SizeLock = newSizeLock }
+            })
+        |> Result.bind (Result.requireSome LibC.EBUSY)
+
+    let acquireRLockOp = FileTree.tryUpdateNodeAt dirPath filename acquireRLock
+
+    filesystem |> tryApplyTreeOperation acquireRLockOp snd
+
+type LockType =
+    | Read
+    | Write
+
+let private fileReleaseLock path (locktype: LockType) (filesystem: FileSystem) =
+    let dirPath, filename = splitLastSep path
+
+    let release =
+        match locktype with
+        | Read -> RWLock.releaseReadLock
+        | Write -> RWLock.releaseWriteLock
+
+    let releaseRLock node =
+        node
+        |> unwrapFileNode
+        |> Result.map (fun fileMD ->
+            FileTree.FileNode
+                { fileMD with
+                    SizeLock = fileMD.SizeLock |> release })
+
+    let releaseRLockOp = FileTree.tryUpdateNodeAt dirPath filename releaseRLock
+
+    filesystem |> tryApplyTreeOperation releaseRLockOp snd
+
 let read (path: string) (offset: uint) (buffer: byte span) (filesystem: FileSystem) =
     let fileMDRes =
-        filesystem.FileTree |> FileTree.tryGetNodeAt path |> Result.bind unwrapFileNode
-
-    printfn "Read request at offset %d with length %d" offset buffer.Length
+        filesystem
+        |> fileAcquireReadLock path
+        |> Result.bind (fun (updateRes, _) -> updateRes.NewNode |> unwrapFileNode)
 
     // unable to use Result.Bind due to span
     match fileMDRes with
@@ -614,22 +664,16 @@ let read (path: string) (offset: uint) (buffer: byte span) (filesystem: FileSyst
         for (addr, readOffset, spanOffset, readSize) in readSeq do
             let readDst = dst[spanOffset .. spanOffset + readSize - 1]
 
-            printfn
-                "Reading addr %d readOffset %d spanOffset %d readSize %d"
-                addr.BlockId
-                readOffset
-                spanOffset
-                readSize
-
             filesystem.DataStorage.DataIO.ReadData(addr, readDst, uint readOffset)
 
-        Ok size
+        filesystem |> fileReleaseLock path LockType.Read |> Result.map (fun _ -> 0)
+
 
 let write (path: string) (offset: uint) (buffer: byte readonlyspan) (filesystem: FileSystem) =
     let fileMDRes =
-        filesystem.FileTree |> FileTree.tryGetNodeAt path |> Result.bind unwrapFileNode
-
-    printfn "Write request at offset %d with length %d" offset buffer.Length
+        filesystem
+        |> fileAcquireReadLock path
+        |> Result.bind (fun (updateRes, _) -> updateRes.NewNode |> unwrapFileNode)
 
     // unable to use Result.Bind due to span
     match fileMDRes with
@@ -638,44 +682,41 @@ let write (path: string) (offset: uint) (buffer: byte readonlyspan) (filesystem:
     | Ok(fileMD) ->
         let blockSize = filesystem.DataStorage.Info.BlockSize
 
-        let newFileMD =
+        let newFileMD, wlocked =
             if offset + uint buffer.Length > fileMD.Size then
-                let res = setFileSize path (offset + uint buffer.Length) filesystem
+                let res = filesystem |> setFileSize path (offset + uint buffer.Length) true
 
                 match res with
-                | Ok(newFileMD) -> newFileMD
-                | Error(code) -> fileMD
+                | Ok(newFileMD) -> newFileMD, true
+                | Error(code) -> fileMD, false
             else
-                fileMD
+                fileMD, false
 
         let size = int (min (newFileMD.Size - offset) (uint buffer.Length))
 
-        if size = 0 then
-            Ok 0
-        else
-            let dst = buffer[0 .. size - 1]
+        let resCode =
+            if size = 0 then
+                0
+            else
+                let dst = buffer[0 .. size - 1]
 
-            let writeSeq =
-                splitSpanByBlockSeq
-                    (int blockSize)
-                    (newFileMD.Content |> List.skip (int (offset / blockSize)))
-                    (int (offset % blockSize))
-                    0
-                    dst.Length
+                let writeSeq =
+                    splitSpanByBlockSeq
+                        (int blockSize)
+                        (newFileMD.Content |> List.skip (int (offset / blockSize)))
+                        (int (offset % blockSize))
+                        0
+                        dst.Length
 
-            for (addr, writeOffset, spanOffset, writeSize) in writeSeq do
-                let writeDst = dst[spanOffset .. spanOffset + writeSize - 1]
+                for (addr, writeOffset, spanOffset, writeSize) in writeSeq do
+                    let writeDst = dst[spanOffset .. spanOffset + writeSize - 1]
 
-                printfn
-                    "Writing addr %d writeOffset %d spanOffset %d writeSize %d"
-                    addr.BlockId
-                    writeOffset
-                    spanOffset
-                    writeSize
+                    filesystem.DataStorage.DataIO.WriteData(addr, writeDst, uint writeOffset)
 
-                filesystem.DataStorage.DataIO.WriteData(addr, writeDst, uint writeOffset)
+                size
 
-            Ok size
+        let lockType = if wlocked then LockType.Write else LockType.Read
+        filesystem |> fileReleaseLock path lockType |> Result.map (fun _ -> resCode)
 
 let chown (path: string) (uid: uint) (gid: uint) (filesystem: FileSystem) =
     let dirPath, filename = splitLastSep path

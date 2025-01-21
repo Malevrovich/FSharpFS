@@ -26,12 +26,7 @@ type FSFSFileSystem(fileSystem: FileSystem) =
 
     override this.Truncate(path: string, length: uint64, fiRef: FuseFileInfoRef) : int =
         try
-            printfn "State before truncate: %A" fileSystem.FileTree
-
-            let res = fileSystem |> setFileSize path (uint length) |> resultToErrorCode
-
-            printfn "State after truncate: %A" fileSystem.FileTree
-            res
+            fileSystem |> setFileSize path (uint length) false |> resultToErrorCode
         with e ->
             printfn "%A" e
             raise e

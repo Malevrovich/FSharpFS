@@ -82,12 +82,10 @@ type DataBlockStorageIOAdapter(stream: Stream, blockSize: uint32, baseOffset: ui
 
     member this.ReadData(blockAddr, span: byte span, ?offset) =
         setBlockAddr blockAddr offset
-        printfn "Reading %d bytes from %d" span.Length blockStream.Stream.Position
         blockStream.Stream.Read(span) |> ignore
 
     member this.WriteData(blockAddr, span: byte readonlyspan, ?offset) =
         setBlockAddr blockAddr offset
-        printfn "Writing %d bytes to %d" span.Length blockStream.Stream.Position
         blockStream.Stream.Write(span)
         blockStream.Stream.Flush() |> ignore
 

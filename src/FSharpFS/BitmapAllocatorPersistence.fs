@@ -13,7 +13,8 @@ type BitmapPersisterPool(filename: string, initialState: Bitmap, allocator: Bitm
     let filePool =
         new ObjectPool<FileStream>(
             16u,
-            (fun _ -> File.Open(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite))
+            (fun _ -> File.Open(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite)),
+            (fun file -> file.Close() |> ignore)
         )
 
     let state = initialState |> Array.copy
@@ -29,6 +30,9 @@ type BitmapPersisterPool(filename: string, initialState: Bitmap, allocator: Bitm
 
         filePool.Release(handle)
 
+    interface IDisposable with
+        member this.Dispose() = (filePool :> IDisposable).Dispose()
+
     member this.PersistBlockAllocation(block) =
         let bitmaskIdx, mask = allocator.BlockMask(block)
         Interlocked.Or(&state[int bitmaskIdx], mask) |> ignore
@@ -42,6 +46,10 @@ type BitmapPersisterPool(filename: string, initialState: Bitmap, allocator: Bitm
 type PersistableBitmapAllocator =
     { Allocator: BitmapAllocator
       Persister: BitmapPersisterPool }
+
+    interface IDisposable with
+        member this.Dispose() =
+            (this.Persister :> IDisposable).Dispose()
 
 let serializeState (state: Bitmap) (stream: Stream) =
     let bytes = state |> Seq.map (BitConverter.GetBytes) |> Array.concat
@@ -71,4 +79,4 @@ let deserializeAllocator (blockCount: uint) (filename: string) (stream: Stream) 
     let allocator = BitmapAllocator(state, blockCount)
 
     { Allocator = allocator
-      Persister = BitmapPersisterPool(filename, allocator.State(), allocator, uint32 position) }
+      Persister = new BitmapPersisterPool(filename, allocator.State(), allocator, uint32 position) }

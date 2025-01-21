@@ -44,7 +44,7 @@ let main argv =
         | Ok(fileSystem) ->
             printfn "Opened FS: %A" fileSystem.FileTree
 
-            let fs = new FSFSFileSystem(fileSystem) :> IFuseFileSystem // fsharplint:disable-line. new indicates that type is IDisposable
+            let fs = new FSFSFileSystem(fileSystem) :> IFuseFileSystem
 
             let mountPoint = "/tmp/fsfs"
 

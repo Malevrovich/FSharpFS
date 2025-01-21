@@ -22,6 +22,7 @@ type ObjectBlockStorage =
 
     interface IDisposable with
         member this.Dispose() : unit =
+            (this.PersistableAllocator :> IDisposable).Dispose()
             (this.ObjectIO :> IDisposable).Dispose()
 
 type DataBlockStorage =
@@ -30,7 +31,9 @@ type DataBlockStorage =
       DataIO: DataBlockStorageIOAdapterPool }
 
     interface IDisposable with
-        member this.Dispose() : unit = (this.DataIO :> IDisposable).Dispose()
+        member this.Dispose() : unit =
+            (this.PersistableAllocator :> IDisposable).Dispose()
+            (this.DataIO :> IDisposable).Dispose()
 
 
 type FileSystem =
@@ -666,7 +669,7 @@ let read (path: string) (offset: uint) (buffer: byte span) (filesystem: FileSyst
 
             filesystem.DataStorage.DataIO.ReadData(addr, readDst, uint readOffset)
 
-        filesystem |> fileReleaseLock path LockType.Read |> Result.map (fun _ -> 0)
+        filesystem |> fileReleaseLock path LockType.Read |> Result.map (fun _ -> size)
 
 
 let write (path: string) (offset: uint) (buffer: byte readonlyspan) (filesystem: FileSystem) =

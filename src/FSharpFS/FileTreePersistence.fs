@@ -9,31 +9,31 @@ open System.IO
 
 let rootParentAddr: BlockStorageAddr = { BlockId = System.UInt32.MaxValue }
 
-type CommonMetadataDTO =
-    { Name: BlockStorageAddr
-      Parent: BlockStorageAddr
-      Uid: uint
-      Gid: uint
-      Mode: mode_t }
-
-type FileMetadataDTO =
-    { Common: CommonMetadataDTO
-      Size: uint
-      Content: BlockStorageAddr array
-      Extension: BlockStorageAddr option }
-
 let maxBlocksInNode = 64
-
-type FileMetadataExtensionDTO =
-    { Content: BlockStorageAddr array
-      Extension: BlockStorageAddr option }
-
-type DirectoryMetadataDTO = { Common: CommonMetadataDTO }
 
 type MetadataDTOBlock =
     | FileDTO of FileMetadataDTO
     | FileExtensionDTO of FileMetadataExtensionDTO
     | DirectoryDTO of DirectoryMetadataDTO
+
+and FileMetadataDTO =
+    { Common: CommonMetadataDTO
+      Size: uint
+      Content: BlockStorageAddr array
+      Extension: BlockStorageAddr option }
+
+and FileMetadataExtensionDTO =
+    { Content: BlockStorageAddr array
+      Extension: BlockStorageAddr option }
+
+and DirectoryMetadataDTO = { Common: CommonMetadataDTO }
+
+and CommonMetadataDTO =
+    { Name: BlockStorageAddr
+      Parent: BlockStorageAddr
+      Uid: uint
+      Gid: uint
+      Mode: mode_t }
 
 let commonMetadataToDTO (parent: BlockStorageAddr) (commonMD: CommonMetadata) =
     { Name = stringAddr commonMD.Name

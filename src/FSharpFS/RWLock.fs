@@ -52,4 +52,7 @@ module RWLock =
         else
             Some { lock with WriteLocked = true }
 
-    let releaseWriteLock lock = { lock with WriteLocked = false }
+    let releaseWriteLock lock =
+        { lock with
+            WriteLocked = false
+            ReadLocked = 0 }

@@ -49,9 +49,15 @@ type FSFSFileSystem(fileSystem: FileSystem) =
 
             match res with
             | Ok res -> res
-            | Error code -> -code
+            | Error code ->
+                printfn "error detected"
+
+                if code = LibC.EIO then
+                    printfn "EIO DETECTED"
+
+                -code
         with e ->
-            printfn "%A" e
+            printfn "Exception: %A" e
             raise e
 
     override this.MkDir(path: string, mode: mode_t) : int =

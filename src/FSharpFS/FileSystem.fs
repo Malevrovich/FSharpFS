@@ -649,7 +649,8 @@ let read (path: string) (offset: uint) (buffer: byte span) (filesystem: FileSyst
     // unable to use Result.Bind due to span
     match fileMDRes with
     | Error(code) -> Error code
-    | Ok(fileMD) when buffer.Length = 0 || fileMD.Size - offset = 0u -> Ok 0
+    | Ok(fileMD) when buffer.Length = 0 || fileMD.Size - offset = 0u ->
+        filesystem |> fileReleaseLock path LockType.Read |> Result.map (fun _ -> 0)
     | Ok(fileMD) ->
         let blockSize = filesystem.DataStorage.Info.BlockSize
 
@@ -673,53 +674,56 @@ let read (path: string) (offset: uint) (buffer: byte span) (filesystem: FileSyst
 
 
 let write (path: string) (offset: uint) (buffer: byte readonlyspan) (filesystem: FileSystem) =
-    let fileMDRes =
-        filesystem
-        |> fileAcquireReadLock path
-        |> Result.bind (fun (updateRes, _) -> updateRes.NewNode |> unwrapFileNode)
+    if buffer.Length = 0 then
+        Ok 0
+    else
+        let fileMDRes =
+            filesystem
+            |> fileAcquireReadLock path
+            |> Result.bind (fun (updateRes, _) -> updateRes.NewNode |> unwrapFileNode)
 
-    // unable to use Result.Bind due to span
-    match fileMDRes with
-    | Error(code) -> Error code
-    | Ok(fileMD) when buffer.Length = 0 -> Ok 0
-    | Ok(fileMD) ->
-        let blockSize = filesystem.DataStorage.Info.BlockSize
+        // unable to use Result.Bind due to span
+        match fileMDRes with
+        | Error(code) -> Error code
+        | Ok(fileMD) when buffer.Length = 0 -> Ok 0
+        | Ok(fileMD) ->
+            let blockSize = filesystem.DataStorage.Info.BlockSize
 
-        let newFileMD, wlocked =
-            if offset + uint buffer.Length > fileMD.Size then
-                let res = filesystem |> setFileSize path (offset + uint buffer.Length) true
+            let newFileMD, wlocked =
+                if offset + uint buffer.Length > fileMD.Size then
+                    let res = filesystem |> setFileSize path (offset + uint buffer.Length) true
 
-                match res with
-                | Ok(newFileMD) -> newFileMD, true
-                | Error(code) -> fileMD, false
-            else
-                fileMD, false
+                    match res with
+                    | Ok(newFileMD) -> newFileMD, true
+                    | Error(code) -> fileMD, false
+                else
+                    fileMD, false
 
-        let size = int (min (newFileMD.Size - offset) (uint buffer.Length))
+            let size = int (min (newFileMD.Size - offset) (uint buffer.Length))
 
-        let resCode =
-            if size = 0 then
-                0
-            else
-                let dst = buffer[0 .. size - 1]
+            let resCode =
+                if size = 0 then
+                    0
+                else
+                    let dst = buffer[0 .. size - 1]
 
-                let writeSeq =
-                    splitSpanByBlockSeq
-                        (int blockSize)
-                        (newFileMD.Content |> List.skip (int (offset / blockSize)))
-                        (int (offset % blockSize))
-                        0
-                        dst.Length
+                    let writeSeq =
+                        splitSpanByBlockSeq
+                            (int blockSize)
+                            (newFileMD.Content |> List.skip (int (offset / blockSize)))
+                            (int (offset % blockSize))
+                            0
+                            dst.Length
 
-                for (addr, writeOffset, spanOffset, writeSize) in writeSeq do
-                    let writeDst = dst[spanOffset .. spanOffset + writeSize - 1]
+                    for (addr, writeOffset, spanOffset, writeSize) in writeSeq do
+                        let writeDst = dst[spanOffset .. spanOffset + writeSize - 1]
 
-                    filesystem.DataStorage.DataIO.WriteData(addr, writeDst, uint writeOffset)
+                        filesystem.DataStorage.DataIO.WriteData(addr, writeDst, uint writeOffset)
 
-                size
+                    size
 
-        let lockType = if wlocked then LockType.Write else LockType.Read
-        filesystem |> fileReleaseLock path lockType |> Result.map (fun _ -> resCode)
+            let lockType = if wlocked then LockType.Write else LockType.Read
+            filesystem |> fileReleaseLock path lockType |> Result.map (fun _ -> resCode)
 
 let chown (path: string) (uid: uint) (gid: uint) (filesystem: FileSystem) =
     let dirPath, filename = splitLastSep path

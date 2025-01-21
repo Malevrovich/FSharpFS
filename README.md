@@ -11,3 +11,24 @@
 - FSFS допускает многопоточный доступ. При возникновении конфликтов система остается в валидном состоянии(либо один из запросов выполняется, второй отклоняется, либо оба отклоняются)
 - Операции над файловой системой реализованы таким образом, что при возникновении ошибок, они откатывают изменения и система остается в валидном состоянии.
 - При непредвиденном отключении FSFS остается всегда в валидном состоянии
+
+# Пример работы
+[Здесь](https://github.com/Malevrovich/FSharpFS/tree/main/tests/unit/scripts) находятся скрипты, для проверки базовой работоспособности
+
+Один из тестовых сценариев. FSFS монтируется в /tmp/fsfs
+```bash
+dd if=/dev/random of=/tmp/fsfs_test_data bs=4096 count=100
+
+dd if=/tmp/fsfs_test_data of=/tmp/fsfs/small bs=1 count=1
+dd if=/tmp/fsfs_test_data of=/tmp/fsfs/small bs=1 count=10
+dd if=/tmp/fsfs_test_data of=/tmp/fsfs/small bs=1 count=100
+dd if=/tmp/fsfs_test_data of=/tmp/fsfs/small bs=1 count=1000
+
+dd if=/tmp/fsfs_test_data of=/tmp/fsfs_test_cut bs=1 count=1000
+cmp /tmp/fsfs/small /tmp/fsfs_test_cut
+```
+![image](https://github.com/user-attachments/assets/a4b187fe-f18f-4853-8176-12b10717a7e7)
+
+Создание директорий
+![image](https://github.com/user-attachments/assets/a7af5ac3-8ce2-47fa-888f-41632d2c4097)
+![image](https://github.com/user-attachments/assets/3c48e028-3baa-4169-b54b-235b59c137db)

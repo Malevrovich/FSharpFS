@@ -91,6 +91,7 @@ BitmapAllocator - аллокатор, который базируется на �
 [Реализация](https://github.com/Malevrovich/FSharpFS/blob/main/src/FSharpFS/CompensativeResult.fs)
 
 [Хороший пример использования 1](https://github.com/Malevrovich/FSharpFS/blob/main/src/FSharpFS/FileSystem.fs#L441-L517)
+
 [Хороший пример использования 2](https://github.com/Malevrovich/FSharpFS/blob/main/src/FSharpFS/FileSystem.fs#L560-L588)
 
 ### Модель выполнения 

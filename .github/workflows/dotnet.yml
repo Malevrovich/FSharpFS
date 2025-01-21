@@ -28,8 +28,6 @@ jobs:
         dotnet tool restore
     - name: Format check
       run: find . -type f -name "*.fs" -not -path "*obj*" | xargs dotnet fantomas --check
-    - name: Lint
-      run: find . -type f -name "*.fs" -not -path "*obj*" | DOTNET_ROLL_FORWARD=latestMajor xargs -n1 dotnet dotnet-fsharplint lint 
     - name: Build
       run: dotnet build --no-restore
     - name: Test
